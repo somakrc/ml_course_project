@@ -1,0 +1,122 @@
+#Exercising Right
+
+##Introduction  
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+The goal of this project is to predict the manner in which a number of volunteers performed the exercise, from barbell lifts correctly and incorrectly in 5 different ways, using data gathered from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. The outcome is provided by the "classe" variable in the training set. We should be able to predict the "classe" for the test set, given the predictors by choosing a right model.
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. Authors of the research paper Wearable Computing: Accelerometers' Data Classification of Body Postures and Movements - 
+Ugulino, W.; Cardador, D.; Vega, K.; Velloso, E.; Milidiu, R.; Fuks, H. have been very generous in allowing their data to be used for this kind of assignment.
+
+```{r 0_load_data, echo=TRUE, cache = TRUE, eval = FALSE}
+library(plyr)
+library(dplyr)
+library(caret)
+library(randomForest)
+library(gbm)
+
+setwd("~/SkyDrive/Coursera/John Hopkins - Data Science/08 Machine Learning/Course Project")
+
+## Missing values and "NA"s need to be considered as NA, while loading the training data
+pml.trg.raw <- read.csv("pml-training.csv", na.strings = c("","NA"))
+
+```
+
+
+## Removing Variables with Missing Entries
+A number of predictors are mere aggregates (averages, variances, skewness, kurtosis etc.) which operate over consecutive windows (indicated by num_window) and populated on new windows. These related variables are ignored. Few other time related variables are also not taken into account, since we are more interested in the actions performed by specific volunteers and the raw measurements from the wearable measurement gadgets which provide a combination of linear and angular displacements and their derivatives. Following block of code removes the unnecessary predictors from the training set.
+
+```{r 1_rm_vars, echo=TRUE, eval = FALSE}
+## Remove the aggregate metrics - which only occur in new window
+emptyCols <- is.na(pml.trg.raw[1,])
+rmEmptyCols <- which(emptyCols)
+pml.trg.interim <- pml.trg.raw[,-rmEmptyCols]
+
+## Check remaining columns
+# colnames(pml.trg.interim)
+## Remove the id column, redundant date and time stamps, and the new window column as well 
+pml.trg <- pml.trg.interim[,-c(1,3,4,5,6)]
+
+#Ensure there are no more variables with missing values
+for(c in 1:dim(pml.trg)[2]) {
+  if(length(which(is.na(pml.trg[,c]))) > 0)
+    {
+      print(colnames(pml.trg)[c])
+    }
+  }
+
+## Data Preparation for Test DataSet - Do the same changes in Test Dataset
+pml.tst.raw = read.csv("pml-testing.csv", na.strings = c("","NA"))
+pml.tst.interim <- pml.tst.raw[,-rmEmptyCols]
+pml.tst <- pml.tst.interim[,-c(1,3,4,5,6)]
+```
+
+We split the available training dataset into training set and 2 validation sets.
+
+```{r 2_trg_split, echo=TRUE, eval = FALSE}
+## Create a subset for training and testing, keeping the testing set for validation
+
+set.seed(123)
+inTrain <- createDataPartition(y = pml.trg$classe, p = 0.8, list = FALSE)
+
+training <- pml.trg[inTrain,]
+val <- pml.trg[-inTrain,]
+```
+
+##Choice of Method
+
+The outcome being a multi-level factor variable, we can use boosting, decision tree or random forest. We would try to fit random forest with default setting, random forest with 10 fold cross validation and gradient boosting and compare the accuracy of each method. We'll select the best method for the ongoing prediction.  
+
+
+```{r 3_model, echo=TRUE, eval = FALSE}
+## Model fit and predictions
+model.rf1 <- randomForest(classe ~ ., data = training)
+model.rf2 <- randomForest(classe ~ ., data = training, cv.fold = 10)
+modfit.gbm <- train(classe~.,data=training, method="gbm", verbose = FALSE)
+
+val.rf1.pred <- predict(model.rf1, newdata = val)
+val.rf2.pred <- predict(model.rf2, newdata = val)
+val.gbm.pred <- predict(modfit.gbm, newdata = val)
+
+# Create the Confusion Matrices and obtain accuracies: 
+cfm.rf1 <- confusionMatrix(val.rf1.pred, val$classe)
+cfm.rf2 <- confusionMatrix(val.rf2.pred, val$classe)
+cfm.gbm <- confusionMatrix(val.gbm.pred, val$classe)
+
+print(paste(
+  round(cfm.rf1$overall[1],4), 
+  round(cfm.rf2$overall[1],4),
+  round(cfm.gbm$overall[1],4)
+))
+```
+##Conclusion
+The accuracies for the 3 methods are 0.9982, 0.9982 and 0.989 respectively.
+The random forest models provide identical results, and are more accurate over gbm on the validation dataset. We choose model.rf1 for further prediction on the give test data set.  
+
+## Appendix
+```{r 5a_testdata, echo=TRUE, eval = FALSE}
+## Model Details
+model.rf1
+#Output
+#No. of variables tried at each split: 7
+
+#        OOB estimate of  error rate: 0.24%
+#Confusion matrix:
+#     A    B    C    D    E  class.error
+#A 4463    1    0    0    0 0.0002240143
+#B    3 3034    1    0    0 0.0013166557
+#C    0   13 2724    1    0 0.0051132213
+#D    0    0   14 2558    1 0.0058297707
+#E    0    0    0    4 2882 0.0013860014
+
+##Evaluate Test Results
+test.rf1.pred <- predict(model.rf1, newdata = pml.tst)
+
+#The above statement provide following outcomes for the test dataset:  
+# 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20   
+# B  A  B  A  A  E  D  B  A  A  B  C  B  A  E  E  A  B  B  B 
+```
+
