@@ -118,50 +118,69 @@ val &lt;- pml.trg[-inTrain,]</code></pre>
 <h2>Choice of Method</h2>
 <p>The outcome being a multi-level factor variable, we can use boosting, decision tree or random forest. We would try to fit random forest with default setting, random forest with 10 fold cross validation and gradient boosting and compare the accuracy of each method. We’ll select the best method for the ongoing prediction.</p>
 <pre class="r"><code>## Model fit and predictions
-model.rf1 &lt;- randomForest(classe ~ ., data = training)
-model.rf2 &lt;- randomForest(classe ~ ., data = training, cv.fold = 10)
+set.seed(456)
+modfit.rf &lt;- randomForest(classe ~ ., data = training)
+
+set.seed(456)
+modfit.rfcv10 &lt;- randomForest(classe ~ ., data = training, cv.fold = 10)
+
+set.seed(456)
 modfit.gbm &lt;- train(classe~.,data=training, method=&quot;gbm&quot;, verbose = FALSE)
 
-val.rf1.pred &lt;- predict(model.rf1, newdata = val)
-val.rf2.pred &lt;- predict(model.rf2, newdata = val)
+set.seed(456)
+modfit.gbmcv10 &lt;- train(classe~.,data=training, method=&quot;gbm&quot;, trControl = trainControl(method = &quot;cv&quot;, number = 10), verbose = FALSE)
+
+# Validation with the 20% held out validation set
+val.rf.pred &lt;- predict(modfit.rf, newdata = val)
+val.rfcv10.pred &lt;- predict(modfit.rfcv10, newdata = val)
 val.gbm.pred &lt;- predict(modfit.gbm, newdata = val)
+val.gbmcv10.pred &lt;- predict(modfit.gbmcv10, newdata = val)
 
 # Create the Confusion Matrices and obtain accuracies: 
-cfm.rf1 &lt;- confusionMatrix(val.rf1.pred, val$classe)
-cfm.rf2 &lt;- confusionMatrix(val.rf2.pred, val$classe)
+cfm.rf &lt;- confusionMatrix(val.rf.pred, val$classe)
+cfm.rfcv10 &lt;- confusionMatrix(val.rfcv10.pred, val$classe)
 cfm.gbm &lt;- confusionMatrix(val.gbm.pred, val$classe)
+cfm.gbmcv10 &lt;- confusionMatrix(val.gbmcv10.pred, val$classe)
 
 print(paste(
-  round(cfm.rf1$overall[1],4), 
-  round(cfm.rf2$overall[1],4),
-  round(cfm.gbm$overall[1],4)
+  round(cfm.rf$overall[1],4), 
+  round(cfm.rfcv10$overall[1],4),
+  round(cfm.gbm$overall[1],4),
+  round(cfm.gbmcv10$overall[1],4)
 ))</code></pre>
 </div>
 <div id="conclusion" class="section level2">
 <h2>Conclusion</h2>
-<p>The accuracies for the 3 methods are 0.9982, 0.9982 and 0.989 respectively. The random forest models provide identical results, and are more accurate over gbm on the validation dataset. We choose model.rf1 for further prediction on the give test data set.</p>
+<p>The accuracies for the 4 methods are 0.9985, 0.9985 and 0.9885, 0.9895 respectively.</p>
+<p>The out of sample (OOB) errors for both Random Forest models are 0.25%.</p>
+<p>The random forest models provide identical results, and are more accurate over gbm on the validation dataset. However, we observe a 10-fold cross-validation slightly improves the accuracy for GBM. We choose modfit.rf for further prediction on the give test data set.</p>
 </div>
 <div id="appendix" class="section level2">
 <h2>Appendix</h2>
 <pre class="r"><code>## Model Details
-model.rf1
-#Output
-#No. of variables tried at each split: 7
+modfit.rf
 
-#        OOB estimate of  error rate: 0.24%
+# Call:
+#  randomForest(formula = classe ~ ., data = training) 
+#               Type of random forest: classification
+#                     Number of trees: 500
+# No. of variables tried at each split: 7
+#
+#        OOB estimate of  error rate: 0.25%
 #Confusion matrix:
 #     A    B    C    D    E  class.error
-#A 4463    1    0    0    0 0.0002240143
-#B    3 3034    1    0    0 0.0013166557
+#A 4463    0    0    0    1 0.0002240143
+#B    5 3032    1    0    0 0.0019749835
 #C    0   13 2724    1    0 0.0051132213
 #D    0    0   14 2558    1 0.0058297707
-#E    0    0    0    4 2882 0.0013860014
+#E    0    0    0    3 2883 0.0010395010
+
 
 ##Evaluate Test Results
-test.rf1.pred &lt;- predict(model.rf1, newdata = pml.tst)
+test.rf.pred &lt;- predict(modfit.rf, newdata = pml.tst)
 
-#The above statement provide following outcomes for the test dataset:  
-# 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20   
+#The above statement provide following outcomes for the test dataset:
+# 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 
 # B  A  B  A  A  E  D  B  A  A  B  C  B  A  E  E  A  B  B  B </code></pre>
 </div>
 </div>
